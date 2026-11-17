@@ -23,6 +23,11 @@
 //   breadthMult  1 + 0.04 x min(chains - 1, 5). A protocol live on more chains has a
 //                wider distribution for a future token.
 //
+// Each row also carries a data-confidence label: high when the snapshot reports both
+// a 7-day change and a listing date for the protocol, medium when one of them is
+// missing, low when both are. A low-confidence row is ranked by the same function,
+// but the dashboard says so, so a reader knows which numbers rest on thin data.
+//
 // No protocol name is ever special-cased. Live-token protocols are kept apart and shown
 // with the market cap the snapshot records, never mixed into the ranking.
 
@@ -125,6 +130,18 @@ export function categoryMultiple(category: string | null): number {
   return 0.25;
 }
 
+/** How much of the snapshot's own data backs a row's implied value. */
+export type Confidence = 'high' | 'medium' | 'low';
+
+/** The confidence of a row, from whether the snapshot reports its growth and age. */
+export function confidenceOf(p: SnapshotProtocol): Confidence {
+  const hasGrowth = p.change_7d !== null;
+  const hasAge = p.listed_at !== null;
+  if (hasGrowth && hasAge) return 'high';
+  if (!hasGrowth && !hasAge) return 'low';
+  return 'medium';
+}
+
 /** A farm step: the action, what it costs, and how long it takes. */
 export interface FarmStep {
   text: string;
@@ -148,6 +165,7 @@ export interface BoardRow {
   token_status: 'pre-token';
   watchlist: boolean;
   age_days: number | null;
+  confidence: Confidence;
   implied_value_usd: number;
   model: {
     category_multiple: number;
@@ -172,6 +190,7 @@ export interface RadarRow {
   listed_at: string | null;
   age_days: number | null;
   watchlist: boolean;
+  confidence: Confidence;
   implied_value_usd: number;
   category_multiple: number;
   growth_multiplier: number;
@@ -321,6 +340,7 @@ export function buildBoard(snapshot: Snapshot, model: ModelConstants = MODEL): B
       token_status: 'pre-token' as const,
       watchlist: watch.has(s.p.slug),
       age_days: s.age,
+      confidence: confidenceOf(s.p),
       implied_value_usd: implied,
       model: {
         category_multiple: s.catMult,
@@ -352,8 +372,8 @@ function chainOf(p: SnapshotProtocol): string {
 
 /** How much capital one farm position needs, from the protocol's own TVL. */
 function capitalFor(p: SnapshotProtocol): number {
-  if (p.tvl_usd >= 5_000_000_000) return 500;
-  if (p.tvl_usd >= 1_000_000_000) return 250;
+  if (p.tvl_usd >= 2_000_000_000) return 500;
+  if (p.tvl_usd >= 500_000_000) return 250;
   if (p.tvl_usd >= 100_000_000) return 150;
   return 75;
 }
@@ -486,6 +506,7 @@ export function radarRow(row: BoardRow): RadarRow {
     listed_at: row.listed_at,
     age_days: row.age_days,
     watchlist: row.watchlist,
+    confidence: row.confidence,
     implied_value_usd: row.implied_value_usd,
     category_multiple: row.model.category_multiple,
     growth_multiplier: row.model.growth_multiplier,
